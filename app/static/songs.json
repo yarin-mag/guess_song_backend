@@ -1,0 +1,17 @@
+[
+  {
+    "id": "1",
+    "title": "Reality",
+    "artist": "Richard Sanderson",
+    "instrument": "piano",
+    "clip_url": "http://localhost:8000/static/reality_piano.mp3"
+  },
+  {
+    "id": "2",
+    "title": "Heartless",
+    "artist": "Kanye West",
+    "instrument": "guitar",
+    "clip_url": "http://localhost:8000/static/heartless_trimmed.mp3",
+    "is_used": true
+  }
+]

@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+numpy
+firebase-admin
+httpx
+clerk_backend_api
+cryptography

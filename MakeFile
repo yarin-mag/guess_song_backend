@@ -1,0 +1,9 @@
+.PHONY: run clean
+
+clean:
+	@echo "🧹 Cleaning __pycache__..."
+	find . -type d -name "__pycache__" -exec rm -r {} +
+
+run: clean
+	@echo "🚀 Starting FastAPI server..."
+	uvicorn main:app --reload --reload-include .env

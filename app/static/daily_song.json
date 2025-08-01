@@ -1,0 +1,11 @@
+{
+  "epoch": 1754006400,
+  "song": {
+    "id": "2",
+    "title": "Heartless",
+    "artist": "Kanye West",
+    "instrument": "guitar",
+    "clip_url": "http://localhost:8000/static/heartless_trimmed.mp3",
+    "is_used": true
+  }
+}

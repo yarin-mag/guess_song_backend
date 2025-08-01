@@ -1,0 +1,1328 @@
+// app\main.py
+from app.core.app_factory import create_app
+from app.users.routes import router as users_router
+from app.guesses.routes import router as guesses_router
+from app.songs.routes import router as songs_router
+from app.webhooks.main import router as webhooks_router
+
+app = create_app(
+    title="Guess Song Game API",
+    routers=[users_router, guesses_router, songs_router, webhooks_router],
+    with_static=True
+)
+
+if __name__ == "__main__":
+    import uvicorn
+    # uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True, loop="asyncio")
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+
+
+// app\auth\clerk_auth.py
+import httpx
+from fastapi import HTTPException, Header
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+CLERK_API_KEY = os.getenv("CLERK_SECRET_KEY")
+
+async def verify_user(authorization: str = Header(...)):
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    token = authorization.split(" ")[1]
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            "https://api.clerk.dev/v1/me",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Clerk-Secret-Key": CLERK_API_KEY,
+            }
+        )
+        if resp.status_code != 200:
+            raise HTTPException(status_code=401, detail="Authentication failed")
+
+        user_data = resp.json()
+        return user_data["id"]
+
+
+// app\auth\dependencies.py
+from fastapi import Request, Header, Depends, HTTPException
+from app.auth.clerk_auth import verify_user
+
+async def get_current_user_id(
+    request: Request,
+    authorization: str = Header(None)
+) -> str:
+    print("🔥 inside get_current_user_id")
+    # Step 1: If the middleware already set user_id (e.g. M2M), use it
+    if hasattr(request.state, "user_id") and request.state.user_id:
+        return request.state.user_id
+
+    # Step 2: Otherwise, use standard Clerk verification
+    if authorization is None:
+        raise HTTPException(status_code=401, detail="Missing Authorization header")
+
+    return await verify_user(authorization=authorization)
+
+async def require_internal_service(request: Request):
+    if getattr(request.state, "auth_type", None) != "internal":
+        raise HTTPException(status_code=403, detail="Only internal services may access this route")
+    return request.state.service_id
+
+// app\core\app_factory.py
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from app.middlewares.auth import AuthMiddleware
+from app.middlewares.request_logger import LoggingMiddleware
+from app.middlewares.rate_limiter import RateLimiterMiddleware
+from dotenv import load_dotenv
+load_dotenv()
+
+import os
+
+IS_RUNNING_LOCAL = os.getenv("IS_RUNNING_LOCAL") == "true"
+
+def create_app(
+    title: str = "API",
+    version: str = "0.1",
+    routers: list = None,
+    with_static: bool = False,
+    with_middlewares: bool = True
+) -> FastAPI:
+    app = FastAPI(title=title, version=version)
+
+    if with_middlewares:
+        app.add_middleware(AuthMiddleware)
+        app.add_middleware(LoggingMiddleware)
+        app.add_middleware(RateLimiterMiddleware, max_requests=1000 if IS_RUNNING_LOCAL else 10, window_seconds=60) # TODO: uncomment
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["https://localhost:5173", "http://localhost:5173"],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+
+    if with_static:
+        app.mount("/static", StaticFiles(directory=os.path.join("app", "static")), name="static")
+
+    if routers:
+        for router in routers:
+            app.include_router(router)
+
+    return app
+
+
+// app\core\config.py
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+DAILY_SONG_JSON_PATH = BASE_DIR / "static" / "daily_song.json"
+
+
+// app\core\logger.py
+import logging
+
+logger = logging.getLogger("guess_song")
+logger.setLevel(logging.INFO)
+
+console_handler = logging.StreamHandler()
+formatter = logging.Formatter("[%(asctime)s] [%(levelname)s] %(message)s")
+console_handler.setFormatter(formatter)
+
+logger.addHandler(console_handler)
+
+
+// app\guesses\consts.py
+MAX_DAILY_GUESSES_FREE_USER = 5
+MAX_DAILY_GUESSES_PREMIUM = 30
+
+// app\guesses\logic.py
+import httpx
+import numpy as np
+import os
+
+async def get_similarity_score(guess: str, correct_song: dict) -> float:
+    async def embed(text: str) -> list[float]:
+        HF_ENDPOINT = "https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2"
+        HF_TOKEN = os.getenv("HF_TOKEN")
+        headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+        async with httpx.AsyncClient() as client:
+            response = await client.post(HF_ENDPOINT, json={"inputs": text}, headers=headers)
+            response.raise_for_status()
+            return response.json()[0]
+
+    vec1 = np.array(await embed(guess))
+    vec2 = np.array(await embed(correct_song["title"]))
+
+    similarity = np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
+    return similarity * 1000  # score between 0 to 1000
+
+// app\guesses\main.py
+from app.core import create_app
+from app.guesses.routes import router as guesses_router
+
+app = create_app(
+    title="Guesses Service",
+    routers=[guesses_router]
+)
+
+// app\guesses\model.py
+from firebase.firebase import get_firestore_client
+from google.cloud import firestore
+from datetime import datetime, timezone
+from app.guesses.repository import GuessResponse
+
+db = get_firestore_client()
+guesses_ref = db.collection("guesses")
+
+async def add_guess(user_id: str, guess: str, song_id: str, is_correct: bool, score: int) -> None:
+    data = {
+        "user_id": user_id,
+        "song_id": song_id,
+        "is_correct": is_correct,
+        "guess": guess,
+        "score": score,
+        "timestamp": firestore.SERVER_TIMESTAMP,
+    }
+    await guesses_ref.add(data)
+
+async def get_guesses(user_id: str):
+    now = datetime.now(timezone.utc)
+    
+    start_of_day = datetime(year=now.year, month=now.month, day=now.day, tzinfo=timezone.utc)
+    query = guesses_ref.where("user_id", "==", user_id).where("timestamp", ">=", start_of_day)
+    docs = query.stream()
+    guesses = []
+    async for doc in docs:
+        data = doc.to_dict()
+        guesses.append(
+            GuessResponse(
+                guess=data.get("guess", ""),
+                is_correct=data.get("is_correct", False),
+                score=data.get("score", 0),
+                guesses_left=data.get("guesses_left", 0)
+            )
+        )
+    return guesses
+
+// app\guesses\repository.py
+from pydantic import BaseModel
+
+class GuessRequest(BaseModel):
+    guess: str
+
+class GuessResponse(BaseModel):
+    guess: str
+    is_correct: bool
+    guesses_left: int
+    score: int
+
+// app\guesses\routes.py
+from fastapi import APIRouter, Depends, Request
+from app.guesses.repository import GuessRequest, GuessResponse
+from app.guesses.service import make_guess
+from app.shared.dependencies import get_current_user
+from app.middlewares.route_rate_limiter import rate_limited
+from app.guesses.service import get_user_guesses
+
+router = APIRouter(prefix="/guesses", tags=["guesses"])
+
+@router.post("", response_model=GuessResponse)
+@rate_limited(limit=10, window=60)  # 10 guesses per minute per user
+async def guess_song(
+    request: Request,
+    user=Depends(get_current_user(False))
+):
+    return await make_guess(user["user_id"], await request.json())
+
+@router.get("/history", response_model=list[GuessResponse])
+async def guess_history(user=Depends(get_current_user(allow_unauthenticated=False))):
+    return await get_user_guesses(user["user_id"])
+
+
+// app\guesses\service.py
+from app.guesses.consts import MAX_DAILY_GUESSES_FREE_USER, MAX_DAILY_GUESSES_PREMIUM
+from app.guesses.model import add_guess, get_guesses
+from app.guesses.repository import GuessRequest, GuessResponse
+from datetime import datetime
+from .logic import get_similarity_score
+from google.cloud import firestore
+import time
+from app.shared.http import call_internal_service
+
+# Cache state
+_cached_daily_song = None
+_cached_epoch = 0
+
+async def get_cached_daily_song():
+    global _cached_daily_song, _cached_epoch
+    now = time.time()
+    today_epoch = int(now - (now % 86400))
+    if _cached_daily_song and _cached_epoch == today_epoch:
+        return _cached_daily_song
+
+    # Fetch from songs service
+    song = await call_internal_service("/songs/daily")
+    _cached_daily_song = song
+    _cached_epoch = today_epoch
+    return song
+
+async def is_guess_correct(user_guess: str, daily_song: dict) -> bool:
+    score = await get_similarity_score(user_guess, daily_song)
+    # score = 500
+    return score
+
+async def make_guess(user_id: str, body: GuessRequest) -> GuessResponse:
+    user = await call_internal_service("/users", "GET", None, { "user_id": user_id })
+    if not user:
+        raise Exception("User not found")
+
+    daily_song = await get_cached_daily_song()
+    score = await is_guess_correct(body['guess'], daily_song)
+
+    today = datetime.utcnow().date().isoformat()
+    guesses_made_today = user.get("guesses", {}).get(today, 0)
+    guesses_user_allowed_to_make_today = MAX_DAILY_GUESSES_PREMIUM if user.get("is_subscribed") else MAX_DAILY_GUESSES_FREE_USER
+    if guesses_made_today >= guesses_user_allowed_to_make_today:
+        raise Exception("No guesses left for today")
+    
+    is_correct = score == 1000
+    
+    await add_guess(user_id, body['guess'], daily_song["id"], is_correct, score)
+    guesses_left = guesses_user_allowed_to_make_today - guesses_made_today - 1
+    updated_guesses = {**user.get("guesses", {}), today: user.get("guesses", {}).get(today, 0) + 1}
+    
+    await call_internal_service(
+    "/users",
+    "PUT",
+    {
+        **user,
+        "guesses": updated_guesses,
+        "last_guess_date": datetime.utcnow().isoformat()
+    },
+    { "user_id": user_id }
+)
+
+    return GuessResponse(guess=body['guess'], is_correct=is_correct, score=score, guesses_left=guesses_left)
+
+
+async def get_user_guesses(user_id: str) -> list[GuessResponse]:
+    # TODO: move model usage to model.py
+    return await get_guesses(user_id)
+
+// app\middlewares\auth.py
+from fastapi import Request, HTTPException
+from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
+from app.shared.clerk import verify_clerk_token
+from app.shared.logger import log_error
+from app.shared.http import verify_internal_jwt
+from .consts import UNPROTECTED_PATHS
+import os
+
+INTERNAL_KEY_HEADER = "x-internal-key"
+INTERNAL_JWT_HEADER = "x-internal-jwt"
+AUTHORIZATION_HEADER = "authorization"
+DEBUG_MODE = os.getenv("DEBUG", "false").lower() == "true"
+
+class AuthMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        try:
+            if request.method == "OPTIONS":
+                return await call_next(request)
+            print("🧩 Request ID: ", id(request))
+            print("request.url: ", request.url)
+            # === 0. Bypass authentication for unprotected paths ===
+            if any(request.url.path.startswith(p) for p in UNPROTECTED_PATHS):
+                # Log user if present, but continue even if not
+                auth_header = request.headers.get(AUTHORIZATION_HEADER)
+                if auth_header and auth_header.lower().startswith("bearer "):
+                    try:
+                        token = auth_header.split(" ", 1)[1]
+                        clerk_user = await verify_clerk_token(token)
+                        request.state.auth_type = "user"
+                        request.state.user_id = clerk_user.get("sub")
+                        # request.state.user_role = clerk_user.get("public_metadata", {}).get("role", "user")
+                    except Exception:
+                        pass  # Ignore errors for optional auth
+                return await call_next(request)
+
+            # === 1. Internal Microservice via JWT ===
+            internal_jwt = request.headers.get(INTERNAL_JWT_HEADER)
+            if internal_jwt:
+                payload = verify_internal_jwt(internal_jwt)
+                request.state.auth_type = "internal"
+                request.state.service_id = payload.get("service", "unknown")
+                request.state.user_id = payload.get("impersonated_user_id", None) or payload.get("user_id", None)
+                return await call_next(request)
+
+            # === 2. Internal via static key ===
+            if DEBUG_MODE:
+                internal_key = request.headers.get(INTERNAL_KEY_HEADER)
+                if internal_key == os.getenv("INTERNAL_API_KEY"):
+                    request.state.auth_type = "internal"
+                    request.state.service_id = "static-key"
+                    request.state.user_id = request.headers.get("x-user-id")
+                    return await call_next(request)
+
+            # === 3. Clerk User JWT ===
+            auth_header = request.headers.get(AUTHORIZATION_HEADER)
+            if auth_header and auth_header.lower().startswith("bearer "):
+                token = auth_header.split(" ", 1)[1]
+                clerk_user = await verify_clerk_token(token)
+                request.state.auth_type = "user"
+                request.state.user_id = clerk_user.get("sub")
+                # request.state.user_role = clerk_user.get("public_metadata", {}).get("role", "user")
+                return await call_next(request)
+
+            raise HTTPException(status_code=401, detail="Unauthorized: missing valid credentials")
+
+        except HTTPException as e:
+            return JSONResponse(status_code=e.status_code, content={"detail": e.detail})
+        except Exception as e:
+            log_error(f"[AuthMiddleware] Unexpected error: {e}")
+            return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
+
+// app\middlewares\consts.py
+UNPROTECTED_PATHS = ["/songs/daily", "/static/"]
+
+
+// app\middlewares\rate_limiter.py
+from starlette.middleware.base import BaseHTTPMiddleware
+from fastapi import Request
+from starlette.responses import JSONResponse
+import time
+from app.shared.logger import log_info, log_error
+
+# In-memory store {key: [timestamps]}
+_rate_limit_store = {}
+
+class RateLimiterMiddleware(BaseHTTPMiddleware):
+    def __init__(self, app, max_requests: int = 10, window_seconds: int = 60):
+        super().__init__(app)
+        self.max_requests = max_requests
+        self.window_seconds = window_seconds
+
+    async def dispatch(self, request: Request, call_next):
+        try:
+            # Skip for internal service calls
+            if request.headers.get("x-internal-jwt"):
+                return await call_next(request)
+
+            identifier = (
+                getattr(request.state, "user_id", None)
+                or request.client.host
+                or "unknown"
+            )
+
+            now = time.time()
+            request_times = _rate_limit_store.get(identifier, [])
+
+            request_times = [ts for ts in request_times if now - ts < self.window_seconds]
+
+            if len(request_times) >= self.max_requests:
+                log_info(f"⛔ Rate limit hit for: {identifier}")
+                return JSONResponse(
+                    status_code=429,
+                    content={"detail": f"Rate limit exceeded. Try again later."},
+                )
+
+            request_times.append(now)
+            _rate_limit_store[identifier] = request_times
+
+            return await call_next(request)
+
+        except Exception as e:
+            log_error(f"[RateLimiterMiddleware] Error: {repr(e)}")
+            return JSONResponse(status_code=500, content={"detail": "Internal error"})
+
+
+// app\middlewares\request_logger.py
+from starlette.middleware.base import BaseHTTPMiddleware
+from app.shared.logger import log_info, log_error
+import time
+
+
+class LoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        start = time.time()
+        actor = self.get_actor(request)
+
+        if request.method != 'OPTIONS':
+            log_info(
+                f"🔄 Request Start: {request.method} {request.url} | By: {actor}")
+
+        try:
+            response = await call_next(request)
+            duration = round(time.time() - start, 3)
+
+            if request.method != 'OPTIONS':
+                log_info(
+                    f"✅ Request End: {request.method} {request.url} | Duration: {duration}s | By: {actor}")
+            return response
+
+        except Exception as e:
+            if request.method != 'OPTIONS':
+                log_error(
+                    f"❌ Request Failed: {request.method} {request.url} | Error: {repr(e)} | By: {actor}")
+            raise
+
+    def get_actor(self, request) -> str:
+        # Try identifying the request initiator
+        user_id = getattr(request.state, "user_id", None)
+        service_id = getattr(request.state, "service_id", None)
+        trace_id = getattr(request.state, "trace_id", None)
+
+        if user_id:
+            return f"user:{user_id}"
+        elif service_id:
+            return f"service:{service_id}"
+        elif trace_id:
+            return f"trace:{trace_id}"
+        else:
+            return "unknown"
+
+
+// app\middlewares\role.py
+from fastapi import Header, HTTPException
+import os
+
+INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "super-secret-key")
+
+async def require_internal_key(x_internal_key: str = Header(..., alias="x-internal-key")):
+    if x_internal_key != INTERNAL_API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid internal key")
+
+
+# async def require_admin(x_user_role: str = Header(None, alias="x-user-role")):
+#     if x_user_role != "admin":
+#         raise HTTPException(status_code=403, detail="Admin access required")
+
+
+// app\middlewares\route_rate_limiter.py
+from fastapi import Request, HTTPException
+from functools import wraps
+import time
+
+# In-memory tracking per-user per-endpoint
+_request_store = {}
+
+def rate_limited(limit: int = 10, window: int = 60):
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            request: Request = kwargs.get("request")
+            user_id = getattr(request.state, "user_id", request.client.host)
+
+            key = f"{user_id}:{request.url.path}"
+            now = time.time()
+            timestamps = _request_store.get(key, [])
+            timestamps = [ts for ts in timestamps if now - ts < window]
+
+            if len(timestamps) >= limit:
+                raise HTTPException(status_code=429, detail="Rate limit exceeded")
+
+            timestamps.append(now)
+            _request_store[key] = timestamps
+
+            return await func(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
+// app\shared\clerk.py
+import os
+from clerk_backend_api import Clerk
+from clerk_backend_api.security import authenticate_request
+from clerk_backend_api.security.types import AuthenticateRequestOptions
+import httpx
+from fastapi import HTTPException
+
+import jwt
+from jwt import PyJWKClient
+
+CLERK_SECRET_KEY = os.getenv("CLERK_SECRET_KEY", "sk_test_nj39jx03yNwIRxlVEMPBET9QjA1ypTk40ookM4QeHT")
+
+async def update_clerk_metadata(user_id: str, metadata: dict):
+    """
+    Updates the public metadata for a Clerk user.
+
+    Args:
+        user_id (str): The Clerk user ID.
+        metadata (dict): Dictionary representing the public metadata to update.
+                         Example: {"isPremium": True, "plan": "pro"}
+    """
+    api_key = CLERK_SECRET_KEY
+    if not api_key:
+        raise EnvironmentError(
+            "CLERK_SECRET_KEY not found in environment variables.")
+
+    url = f"https://api.clerk.dev/v1/users/{user_id}/metadata"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    data = {
+        "public_metadata": metadata
+    }
+
+    async with httpx.AsyncClient() as client:
+        response = await client.patch(url, json=data, headers=headers)
+
+    if response.status_code < 200 or response.status_code >= 300:
+        raise Exception(
+            f"Failed to update metadata: {response.status_code}, {response.text}")
+
+    return response.json()
+
+
+async def fetch_clerk_user_data(user_id: str):
+    """
+    Fetch user from Clerk using their management API.
+    """
+    api_key = CLERK_SECRET_KEY
+    if not api_key:
+        raise EnvironmentError("CLERK_SECRET_KEY not found in environment.")
+
+    url = f"https://api.clerk.dev/v1/users/{user_id}"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, headers=headers)
+    if response.status_code < 200 or response.status_code >= 300:
+        raise Exception(
+            f"Failed to fetch user {user_id}: {response.status_code} {response.text}")
+
+    return response.json()
+
+AUTHORIZED_PARTIES = ["http://localhost:5173", "https://localhost:5173"]  # Or your actual frontend origins
+
+# async def verify_clerk_token(token: str):
+#     sdk = Clerk(bearer_auth=CLERK_SECRET_KEY)
+
+#     # Build a fake request object just to use with the SDK
+#     request = httpx.Request(
+#         method="GET",
+#         url="http://fake",  # Clerk SDK doesn't actually use the URL
+#         headers={"Authorization": f"Bearer {token}"}
+#     )
+
+#     request_state = sdk.authenticate_request(
+#         request,
+#         AuthenticateRequestOptions(authorized_parties=AUTHORIZED_PARTIES)
+#     )
+
+#     if not request_state.is_signed_in:
+#         raise HTTPException(status_code=401, detail=f"Unauthenticated: {request_state.reason}")
+
+#     return request_state.payload
+
+CLERK_JWKS_URL = f"https://direct-reptile-68.clerk.accounts.dev/.well-known/jwks.json"
+EXPECTED_ISSUER = f"https://direct-reptile-68.clerk.accounts.dev"
+EXPECTED_AUDIENCE = "http://localhost:5173"  # Or your actual azp
+
+async def verify_clerk_token(token: str):
+    try:
+        jwks_client = PyJWKClient(CLERK_JWKS_URL)
+        signing_key = jwks_client.get_signing_key_from_jwt(token)
+
+        payload = jwt.decode(
+            token,
+            signing_key.key,
+            algorithms=["RS256"],
+            issuer=EXPECTED_ISSUER
+        )
+        return payload
+
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Invalid JWT: {str(e)}")
+
+// app\shared\dependencies.py
+from fastapi import Request, HTTPException, Depends
+
+def get_current_user(allow_unauthenticated: bool = False):
+    def dependency(request: Request):
+        user_id = getattr(request.state, "user_id", None)
+        if allow_unauthenticated and not user_id:
+            user_id = ''
+        elif not user_id:
+            raise HTTPException(
+                status_code=401, detail="Unauthorized: no user in request"
+            )
+
+        return {"user_id": user_id} if user_id else None
+
+    return dependency
+
+
+// app\shared\http.py
+import httpx
+import os
+from typing import Optional, Dict, Any
+import jwt
+import uuid
+import time
+from dotenv import load_dotenv
+load_dotenv()
+
+USER_SERVICE_URL = os.getenv("USER_SERVICE_URL", "http://localhost:8000")
+INTERNAL_KEY = os.getenv("INTERNAL_API_KEY", "super-secret-key")
+MICRO_JWT_SECRET = os.getenv("MICRO_JWT_SECRET", "micro-jwt-secret")
+MICRO_JWT_ALGORITHM = "HS256"
+IS_RUNNING_LOCAL = os.getenv("IS_RUNNING_LOCAL") == "true"
+
+
+def sign_internal_jwt(payload: Optional[Dict[str, Any]] = None, expires_in: int = 300) -> str:
+    """
+    Sign a JWT for internal microservice communication.
+    :param payload: Custom payload to include in the JWT.
+    :param expires_in: Expiration time in seconds.
+    :return: JWT as string.
+    """
+    now = int(time.time())
+    data = {
+        "iat": now,
+        "exp": now + expires_in,
+        **(payload or {})
+    }
+    token = jwt.encode(data, MICRO_JWT_SECRET, algorithm=MICRO_JWT_ALGORITHM)
+    # PyJWT >= 2.0 returns str, <2.0 returns bytes
+    if isinstance(token, bytes):
+        token = token.decode("utf-8")
+    return token
+
+
+def verify_internal_jwt(token: str) -> Dict[str, Any]:
+    """
+    Verify a JWT for internal microservice communication.
+    :param token: JWT as string.
+    :return: Decoded payload if valid, raises jwt exceptions if invalid.
+    """
+    try:
+        payload = jwt.decode(token, MICRO_JWT_SECRET, algorithms=[MICRO_JWT_ALGORITHM])
+        return payload
+    except jwt.ExpiredSignatureError:
+        raise Exception("Internal JWT expired")
+    except jwt.InvalidTokenError:
+        raise Exception("Invalid internal JWT")
+
+
+async def call_internal_service(
+    service_url: str,
+    method: str = "GET",
+    body: Optional[Dict[str, Any]] = None,
+    params: Optional[Dict[str, Any]] = None,
+    headers: Optional[Dict[str, str]] = None
+) -> Any:
+    full_url = f"{USER_SERVICE_URL}{service_url}"
+    trace_id = str(uuid.uuid4())
+    internal_jwt = sign_internal_jwt({ **(body or {}), **(params or {}) })
+    request_headers = {
+        "x-trace-id": trace_id,
+        "x-internal-key": INTERNAL_KEY,
+        "x-internal-jwt": internal_jwt,
+        **(headers or {})
+    }
+
+    timeout = httpx.Timeout(300.0 if IS_RUNNING_LOCAL else 20.0, connect=5.0)
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        response = await client.request(
+            method=method.upper(),
+            url=full_url,
+            headers=request_headers,
+            json=body if method.upper() in {"POST", "PUT", "PATCH"} else None,
+            params=params
+        )
+
+        if response.status_code >= 400:
+            raise Exception(
+                f"Failed to call {method.upper()} {service_url}: {response.text}")
+
+        return response.json()
+
+
+// app\shared\logger.py
+import logging
+import os
+
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    level=LOG_LEVEL,
+    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+)
+
+logger = logging.getLogger("MCP-Backend")
+
+def log_info(message: str):
+    logger.info(message)
+
+
+def log_error(message: str):
+    logger.error(message)
+
+
+def log_debug(message: str):
+    logger.debug(message)
+
+def log_action(actor: str, action: str, context: dict = None):
+    message = f"📌 Action by {actor}: {action}"
+    if context:
+        message += f" | Context: {context}"
+    logger.info(message)
+
+
+// app\shared\request_logger.py
+import time
+from fastapi import Request
+from app.shared.logger import log_info, log_error
+
+
+class RequestLogger:
+    def __init__(self):
+        pass  # In the future: integrate Coralogix or some free tier metrics cloud provider.
+
+    async def log_start(self, request: Request):
+        request.state._start_time = time.time()
+        log_info(f"🔄 Request Start: {request.method} {request.url}")
+
+    async def log_end(self, request: Request):
+        duration = round(time.time() - getattr(request.state,
+                         "_start_time", time.time()), 3)
+        log_info(
+            f"✅ Request End: {request.method} {request.url} | Duration: {duration}s")
+
+    async def log_failure(self, request: Request, error: Exception):
+        log_error(
+            f"❌ Request Failed: {request.method} {request.url} | Error: {repr(error)}")
+
+
+// app\songs\consts.py
+import os
+
+SONGS_DIR = os.path.join("app", "static", "songs")
+SONGS_METADATA_FILE = os.path.join(SONGS_DIR, "songs.json")
+
+// app\songs\main.py
+from app.core import create_app
+from app.songs.routes import router as songs_router
+
+app = create_app(
+    title="Songs Service",
+    routers=[songs_router]
+)
+
+// app\songs\model.py
+import json
+from app.songs.consts import SONGS_METADATA_FILE
+from typing import List, Dict
+
+def load_songs_metadata() -> List[Dict]:
+    with open(SONGS_METADATA_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def get_song_by_id(song_id: str) -> Dict:
+    songs = load_songs_metadata()
+    for song in songs:
+        if song["id"] == song_id:
+            return song
+    return None
+
+// app\songs\routes.py
+from fastapi import APIRouter
+from app.songs.service import get_random_song, get_song
+from fastapi.responses import JSONResponse
+from .utils import get_daily_song
+
+router = APIRouter(prefix="/songs", tags=["songs"])
+
+@router.get("/daily")
+async def daily_song():
+    return get_daily_song()
+
+@router.get("/random")
+async def get_random():
+    """
+    Returns a random song from the list.
+    """
+    return get_random_song()
+
+@router.get("/{song_id}")
+async def get_by_id(song_id: str):
+    """
+    Returns metadata for a specific song.
+    """
+    song = get_song(song_id)
+    return JSONResponse(song)
+
+// app\songs\service.py
+from app.songs.model import load_songs_metadata, get_song_by_id
+from typing import Dict
+import random
+
+def get_random_song() -> Dict:
+    songs = load_songs_metadata()
+    return random.choice(songs)
+
+def get_song(song_id: str) -> Dict:
+    song = get_song_by_id(song_id)
+    if not song:
+        raise Exception("Song not found")
+    return song
+
+// app\songs\utils.py
+import json
+import os
+import time
+import random
+
+SONGS_FILE = "app/static/songs.json"
+DAILY_SONG_FILE = "app/static/daily_song.json"
+
+def _load_songs():
+    with open(SONGS_FILE, "r") as f:
+        return json.load(f)
+
+def _save_songs(songs):
+    with open(SONGS_FILE, "w") as f:
+        json.dump(songs, f, indent=2)
+
+def _get_today_epoch():
+    now = time.time()
+    return int(now - (now % 86400))
+
+def get_daily_song():
+    # 1. Try to load daily song cache
+    today_epoch = _get_today_epoch()
+    if os.path.exists(DAILY_SONG_FILE):
+        with open(DAILY_SONG_FILE, "r") as f:
+            data = json.load(f)
+            if data.get("epoch") == today_epoch:
+                return data["song"]
+
+    # 2. Pick new song and mark as used
+    songs = _load_songs()
+    unused_songs = [s for s in songs if not s.get("is_used", False)]
+    if not unused_songs:
+        raise Exception("No unused songs left")
+
+    new_song = random.choice(unused_songs)
+    new_song["is_used"] = True
+    _save_songs(songs)
+
+    with open(DAILY_SONG_FILE, "w") as f:
+        json.dump({"epoch": today_epoch, "song": new_song}, f, indent=2)
+
+    return new_song
+
+
+// app\users\consts.py
+from google.cloud import firestore
+
+NEW_USER_DATA = {
+    "is_subscribed": False,
+    "guesses_left": 5,
+    "subscription_start_date": None,
+    "subscription_end_date_net": None,
+    "subscription_end_date_gross": None,
+    "agree_to_conditions_and_terms": None,
+    "subscription_id": None,
+    "monthly_payment": None,
+    "payment_history": []
+}
+
+// app\users\main.py
+from app.core.app_factory import create_app
+from app.users.routes import router as users_router
+
+app = create_app(
+    title="Users Service",
+    routers=[users_router]
+)
+
+
+
+
+
+// app\users\model.py
+from datetime import datetime
+from firebase.firebase import get_firestore_client
+from google.cloud import firestore
+from app.users.repository import UserResponse
+from app.users.consts import NEW_USER_DATA
+
+db = get_firestore_client()
+users_ref = db.collection("users")
+
+async def get_user_by_id(user_id: str) -> UserResponse | None:
+    doc = await users_ref.document(user_id).get()
+    if not doc.exists:
+        return None
+    return UserResponse(**doc.to_dict())
+
+async def create_user(user_id: str) -> UserResponse:
+    data = NEW_USER_DATA.copy()
+    data["id"] = user_id
+    data["guesses"] = { datetime.utcnow().isoformat(): 0 }
+    await users_ref.document(user_id).set(data)
+    return UserResponse(**data)
+
+async def update_user_fields(user_id: str, update_data: dict):
+    await users_ref.document(user_id).update(update_data)
+
+// app\users\repository.py
+from pydantic import BaseModel
+from typing import Optional, Dict, List, Any
+from datetime import datetime
+
+class UserResponse(BaseModel):
+    id: str
+    is_subscribed: bool
+    guesses_left: int
+    last_guess_date: Optional[datetime]
+    guesses: Dict[str, int] = {} 
+    subscription_start_date: Optional[datetime] = None
+    subscription_end_date_net: Optional[datetime] = None
+    subscription_end_date_gross: Optional[datetime] = None
+    agree_to_conditions_and_terms: Optional[datetime] = None
+    subscription_id: Optional[str] = None
+    monthly_payment: Optional[float] = None
+    payment_history: List[Dict[str, Any]] = []
+
+class UserUpdateRequest(BaseModel):
+    is_subscribed: Optional[bool] = None
+    guesses_left: Optional[int] = None
+    last_guess_date: Optional[datetime] = None
+    subscription_start_date: Optional[datetime] = None
+    subscription_end_date_net: Optional[datetime] = None
+    subscription_end_date_gross: Optional[datetime] = None
+    agree_to_conditions_and_terms: Optional[datetime] = None
+    subscription_id: Optional[str] = None
+    monthly_payment: Optional[float] = None
+    payment_history: Optional[List[Dict[str, Any]]] = None
+
+// app\users\routes.py
+from fastapi import APIRouter, Depends
+from app.auth.clerk_auth import verify_user
+from app.auth.dependencies import get_current_user_id, require_internal_service
+from app.users.service import get_or_create_user, update_user_data, cancel_subscription, agree_to_terms_and_conditions
+from app.users.repository import UserUpdateRequest, UserResponse
+
+router = APIRouter(prefix="/users", tags=["users"])
+
+@router.post("/cancel-subscription")
+async def cancel_subscription_route(user_id: str = Depends(get_current_user_id)):
+    return await cancel_subscription(user_id)
+
+@router.post("/agree-to-terms-and-conditions")
+async def agree_to_terms_and_conditions_route(user_id: str = Depends(get_current_user_id)):
+    return await agree_to_terms_and_conditions(user_id)
+
+@router.get("", response_model=UserResponse)
+async def get(user_id: str = Depends(get_current_user_id)):
+    return await get_or_create_user(user_id)
+
+@router.put("", response_model=UserResponse)
+async def update(update_req: UserUpdateRequest, user_id: str = Depends(get_current_user_id),  _ = Depends(require_internal_service)):
+    return await update_user_data(user_id, update_req)
+
+// app\users\service.py
+from app.users.model import get_user_by_id, create_user, update_user_fields
+from app.users.repository import UserUpdateRequest, UserResponse
+from google.cloud import firestore
+from datetime import datetime
+from .third_party_api_calls import get_paypal_access_token, cancel_paypal_subscription
+
+async def get_or_create_user(user_id: str) -> UserResponse:
+    user_doc = await get_user_by_id(user_id)
+    if not user_doc:
+        return await create_user(user_id)
+    return user_doc
+
+async def update_user_data(user_id: str, update_req: UserUpdateRequest) -> UserResponse:
+    user_doc = await get_user_by_id(user_id)
+    if not user_doc:
+        raise Exception("User not found!")
+    await update_user_fields(user_id, update_req.dict(exclude_unset=True))
+    return await get_user_by_id(user_id)
+
+async def cancel_subscription(user_id: str):
+    user_doc = await get_user_by_id(user_id)
+    
+    if not user_doc:
+        raise Exception("User not found!")
+    
+    if user_doc.get('subscription_id') is None:
+        raise Exception("User has no subscription_id on the document!")
+    
+    paypal_access_token = await get_paypal_access_token()
+    return await cancel_paypal_subscription(access_token=paypal_access_token, subscription_id=user_doc.get('subscription_id'))
+    
+async def agree_to_terms_and_conditions(user_id: str):
+    update_req = UserUpdateRequest(agree_to_conditions_and_terms=datetime.utcnow())
+    return await update_user_data(user_id, update_req)
+    
+
+// app\users\third_party_api_calls.py
+from fastapi import HTTPException
+import httpx
+import os
+
+from dotenv import load_dotenv
+load_dotenv()
+
+PAYPAL_CLIENT_ID = os.getenv("PAYPAL_CLIENT_ID")
+PAYPAL_CLIENT_SECRET = os.getenv("PAYPAL_CLIENT_SECRET")
+PAYPAL_API_BASE = "https://api-m.sandbox.paypal.com" if os.getenv(
+    "ENV") != "prod" else "https://api-m.paypal.com"
+
+
+async def get_paypal_access_token():
+    async with httpx.AsyncClient() as client:
+        res = await client.post(
+            f"{PAYPAL_API_BASE}/v1/oauth2/token",
+            data={"grant_type": "client_credentials"},
+            auth=(PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET),
+            headers={"Accept": "application/json"}
+        )
+        res.raise_for_status()
+        return res.json()["access_token"]
+
+
+async def cancel_paypal_subscription(subscription_id: str, access_token: str):
+    async with httpx.AsyncClient() as client:
+        res = await client.post(
+            f"{PAYPAL_API_BASE}/v1/billing/subscriptions/{subscription_id}/cancel",
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json"
+            },
+            json={"reason": "User cancelled via app"}
+        )
+        if res.status_code not in (204, 202):
+            try:
+                error = res.json()
+            except Exception:
+                error = res.text
+            raise HTTPException(
+                status_code=500, detail=f"Failed to cancel subscription: {error}")
+
+    return {"status": "cancelled"}
+
+
+// app\webhooks\main.py
+from fastapi import APIRouter
+from app.webhooks.paypal import router as paypal_router
+
+router = APIRouter(prefix="/webhooks")
+
+router.include_router(paypal_router)
+
+
+// app\webhooks\paypal.py
+import json
+import logging
+import os
+from fastapi import APIRouter, Request, HTTPException, Header
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives.serialization import load_pem_public_key
+from app.shared.http import call_internal_service
+import httpx
+from datetime import datetime, timedelta
+from app.users.model import get_user_by_id, update_user_fields
+
+router = APIRouter()
+
+PAYPAL_WEBHOOK_ID = os.getenv("PAYPAL_WEBHOOK_ID")
+
+
+async def verify_paypal_signature(request: Request, headers: dict) -> bool:
+    """
+    Verifies the PayPal webhook signature.
+    """
+    try:
+        transmission_id = headers.get("paypal-transmission-id")
+        transmission_time = headers.get("paypal-transmission-time")
+        cert_url = headers.get("paypal-cert-url")
+        auth_algo = headers.get("paypal-auth-algo")
+        transmission_sig = headers.get("paypal-transmission-sig")
+        webhook_id = PAYPAL_WEBHOOK_ID
+
+        if not all([transmission_id, transmission_time, cert_url, auth_algo, transmission_sig, webhook_id]):
+            logging.error("Missing PayPal headers for verification.")
+            return False
+
+        # Fetch the public key certificate from PayPal
+        async with httpx.AsyncClient() as client:
+            response = await client.get(cert_url)
+            response.raise_for_status()
+
+        cert_pem = response.text
+        cert = x509.load_pem_x509_certificate(cert_pem.encode("utf-8"))
+        public_key = cert.public_key()
+
+        # Construct the expected signature
+        body = await request.body()
+        expected_signature_base = f"{transmission_id}|{transmission_time}|{webhook_id}|{body.decode('utf-8')}"
+
+        # Verify the signature
+        public_key.verify(
+            bytes.fromhex(transmission_sig),
+            expected_signature_base.encode("utf-8"),
+            padding.PKCS1v15(),
+            hashes.SHA256()
+        )
+
+        # Additionally, you might want to check the certificate chain and subject.
+        # For this example, we are trusting the certificate from the URL.
+
+        return True
+    except Exception as e:
+        logging.error(f"Error verifying PayPal signature: {e}")
+        return False
+
+
+@router.post("/paypal-webhook")
+async def paypal_webhook(request: Request):
+    """
+    Handles webhooks from PayPal.
+    """
+    headers = dict(request.headers)
+
+    # Temporarily disable verification for local testing if needed
+    # if os.getenv("IS_RUNNING_LOCAL") == "true":
+    #     is_verified = True
+    # else:
+    is_verified = await verify_paypal_signature(request, headers)
+
+    if not is_verified:
+        raise HTTPException(
+            status_code=400, detail="Webhook signature verification failed.")
+
+    body = await request.body()
+    event = json.loads(body)
+
+    if event["event_type"] == "BILLING.SUBSCRIPTION.CREATED":
+        resource = event.get("resource", {})
+        subscription_id = resource.get("id")
+        user_id = resource.get("custom_id")
+
+        if not user_id:
+            logging.error(
+                "Received subscription event without custom_id (user_id).")
+            raise HTTPException(
+                status_code=400, detail="User ID not found in webhook payload.")
+        if not subscription_id:
+            logging.error(
+                "Received subscription event without id (subscription_id).")
+            raise HTTPException(
+                status_code=400, detail="Subscription ID not found in webhook payload.")
+            
+        user = await call_internal_service("/users", "GET", None, {"user_id": user_id})
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        billing_info = resource.get("billing_info", {})
+        last_payment = billing_info.get("last_payment", {})
+
+        if not hasattr(user, 'payment_history') or user.payment_history is None:
+            user.payment_history = []
+
+        user.payment_history.append({
+            "payment_id": event.get("id"),
+            "create_time": event.get("create_time"),
+            "amount": float(last_payment.get("amount", 0.0)),
+            "currency": last_payment.get("currency_code")
+        })
+
+        await call_internal_service(
+            "/users",
+            "PUT",
+            {
+                **user,
+                "is_subscribed": True,
+                "subscription_start_date": event.get("create_time"),
+                "subscription_end_date_net": None,
+                "subscription_end_date_gross": None,
+                "subscription_id": subscription_id,
+                "monthly_payment": float(last_payment.get("amount", 0.0)),
+                "payment_history": user.payment_history
+            },
+            {"user_id": user_id}
+        )
+
+        logging.info(f"User {user_id} subscribed successfully.")
+    elif event["event_type"] == "BILLING.SUBSCRIPTION.CANCELLED":
+        resource = event.get("resource", {})
+        user_id = resource.get("custom_id")
+
+        if not user_id:
+            logging.error("Cancellation event missing user ID")
+            raise HTTPException(status_code=400, detail="Missing user ID")
+        
+        today = datetime.utcnow().date()
+        subscription_end_gross = (today + timedelta(days=30)).isoformat()
+        today_iso = today.isoformat()
+        
+        await call_internal_service(
+            "/users",
+            "PUT",
+            {
+                "is_subscribed": False,
+                "subscription_end_date_net": today_iso,
+                "subscription_end_date_gross": subscription_end_gross,
+                "subscription_id": None
+            },
+            {"user_id": user_id}
+        )
+
+        logging.info(f"User {user_id} subscription cancelled.")
+
+    return {"status": "success"}
+
+
+// firebase\firebase.py
+from functools import lru_cache
+from google.cloud import firestore_v1
+from google.oauth2 import service_account
+import os
+
+@lru_cache()
+def get_firestore_client():
+    cred_path = os.path.join(os.path.dirname(__file__), "firebase_creds.json")
+
+    credentials = service_account.Credentials.from_service_account_file(cred_path)
+    return firestore_v1.AsyncClient(credentials=credentials)
+
+
+// scripts\clean.py
+import os
+import subprocess
+
+def main():
+    print("🧹 Cleaning __pycache__...")
+    subprocess.run(["find", ".", "-type", "d", "-name", "__pycache__", "-exec", "rm", "-r", "{}", "+"])
+
+    print("🚀 CLEANED...")
+
+// scripts\run_api.py
+import os
+import subprocess
+
+def main():
+    print("🧹 Cleaning __pycache__...")
+    subprocess.run(["find", ".", "-type", "d", "-name", "__pycache__", "-exec", "rm", "-r", "{}", "+"])
+
+    print("🚀 Starting FastAPI server...")
+    subprocess.run(["uvicorn", "app.main:app", "--reload", "--reload-include", ".env"])
+
+
