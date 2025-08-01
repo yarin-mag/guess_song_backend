@@ -1,16 +1,22 @@
-If First time running / installation: 
-    Windows PC:
-        python -m venv .venv
-        ./.venv/Scripts/Activate.ps1
-        python scripts/clean.py
-        python .\scripts\run_api.py
+# Project Setup & Usage Guide
 
-Second time+ Running:
-    Windows PC:
-        ./.venv/Scripts/Activate.ps1
-        python .\scripts\clean.py
-        python .\scripts\run_api.py
+This guide outlines how to install, run, and debug the project on a Windows machine. It assumes you are using PowerShell and have Python installed.
 
-Debug:
-    Just F5 but notice to do it from the root of the project where you see backend and frontend folders.
-    Or just fine tune the launch.json if you open only backend project.
+---
+
+## 📦 First-Time Setup (Windows)
+
+Run the following commands from the root directory of the project:
+
+```powershell
+# Create virtual environment
+python -m venv .venv
+
+# Activate virtual environment
+.\.venv\Scripts\Activate.ps1
+
+# Clean previous artifacts (if any)
+python scripts/clean.py
+
+# Start the API
+python scripts/run_api.py
