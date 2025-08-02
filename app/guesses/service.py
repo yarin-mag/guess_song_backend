@@ -39,9 +39,7 @@ async def make_guess(user_id: str, body: GuessRequest) -> GuessResponse:
     guesses_user_made_today = await get_guesses(user_id, date=today)
     for past_guess in guesses_user_made_today:
         if past_guess["guess"] == user_new_guess:
-            return GuessResponse(guess=user_new_guess, is_correct=past_guess["is_correct"], score=past_guess['score'], guesses_left=user.get("guesses_left"))
-
-    score = await is_guess_correct(user_new_guess, daily_song)
+            return GuessResponse(guess=user_new_guess, is_correct=past_guess["is_correct"], score=past_guess['score'], guesses_left=user.get("guesses_left"), credit_url=past_guess['credit_url'])
 
     user_guesses = user.get("guesses", {})
     guesses_made_today = user_guesses.get(today, 0)
@@ -49,6 +47,7 @@ async def make_guess(user_id: str, body: GuessRequest) -> GuessResponse:
     if guesses_made_today >= guesses_user_allowed_to_make_today:
         raise Exception("No guesses left for today")
     
+    score = await is_guess_correct(user_new_guess, daily_song)
     is_correct = score == 1000
     
     await add_guess(user_id, user_new_guess, daily_song["id"], is_correct, score)
@@ -67,7 +66,11 @@ async def make_guess(user_id: str, body: GuessRequest) -> GuessResponse:
     { "user_id": user_id }
 )
 
-    return GuessResponse(guess=user_new_guess, is_correct=is_correct, score=score, guesses_left=guesses_left)
+    credit_url = None
+    if is_correct:
+        credit_url = daily_song.get("credit_clip")
+
+    return GuessResponse(guess=user_new_guess, is_correct=is_correct, score=score, guesses_left=guesses_left, credit_url=credit_url)
 
 
 async def get_user_guesses(user_id: str) -> list[GuessResponse]:

@@ -8,7 +8,7 @@ from fastapi import HTTPException
 import jwt
 from jwt import PyJWKClient
 
-CLERK_SECRET_KEY = os.getenv("CLERK_SECRET_KEY", "sk_test_nj39jx03yNwIRxlVEMPBET9QjA1ypTk40ookM4QeHT")
+CLERK_SECRET_KEY = os.getenv("CLERK_SECRET_KEY", "sk_test_QSap93NyGus8bBKofwoL0X2K4guOUF3VMnet7O6F33")
 
 async def update_clerk_metadata(user_id: str, metadata: dict):
     """

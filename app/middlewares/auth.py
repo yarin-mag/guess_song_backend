@@ -59,6 +59,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 clerk_user = await verify_clerk_token(token)
                 request.state.auth_type = "user"
                 request.state.user_id = clerk_user.get("sub")
+                request.state.clerk_user = clerk_user
                 # request.state.user_role = clerk_user.get("public_metadata", {}).get("role", "user")
                 return await call_next(request)
 

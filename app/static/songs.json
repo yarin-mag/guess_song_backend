@@ -4,7 +4,8 @@
     "title": "Reality",
     "artist": "Richard Sanderson",
     "instrument": "piano",
-    "clip_url": "http://localhost:8000/static/reality_piano.mp3"
+    "clip_url": "http://localhost:8000/static/reality_piano.mp3",
+    "credit_clip": "https://www.youtube.com/watch?v=uk29cpX6Kd4&ab_channel=Pianothek"    
   },
   {
     "id": "2",
@@ -12,6 +13,6 @@
     "artist": "Kanye West",
     "instrument": "guitar",
     "clip_url": "http://localhost:8000/static/heartless_trimmed.mp3",
-    "is_used": true
+    "credit_clip": "https://www.youtube.com/watch?v=cU7n0x-dTic&ab_channel=JusticeDer"
   }
 ]

@@ -1,13 +1,15 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from app.songs.service import get_random_song, get_song
 from fastapi.responses import JSONResponse
-from .utils import get_daily_song
+from .service import get_daily_song
 
 router = APIRouter(prefix="/songs", tags=["songs"])
 
 @router.get("/daily")
-async def daily_song():
-    return get_daily_song()
+async def daily_song(request: Request):
+    auth_type = request.get("state", {}).get("auth_type", None)
+    should_get_credit_url = "internal" == auth_type
+    return await get_daily_song(should_get_credit_url)
 
 @router.get("/random")
 async def get_random():

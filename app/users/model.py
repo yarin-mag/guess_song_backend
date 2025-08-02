@@ -13,8 +13,9 @@ async def get_user_by_id(user_id: str) -> UserResponse | None:
         return None
     return UserResponse(**doc.to_dict())
 
-async def create_user(user_id: str) -> UserResponse:
+async def create_user(user_id: str, user_data: dict) -> UserResponse:
     data = NEW_USER_DATA.copy()
+    data.update(user_data)
     data["id"] = user_id
     data["guesses"] = { datetime.utcnow().date().isoformat(): 0 }
     await users_ref.document(user_id).set(data)

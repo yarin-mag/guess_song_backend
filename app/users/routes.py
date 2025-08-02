@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from app.auth.clerk_auth import verify_user
 from app.auth.dependencies import get_current_user_id, require_internal_service
 from app.users.service import get_or_create_user, update_user_data, cancel_subscription, agree_to_terms_and_conditions
@@ -15,7 +15,7 @@ async def agree_to_terms_and_conditions_route(user_id: str = Depends(get_current
     return await agree_to_terms_and_conditions(user_id)
 
 @router.get("", response_model=UserResponse)
-async def get(user_id: str = Depends(get_current_user_id)):
+async def get(request: Request, user_id: str = Depends(get_current_user_id)):
     return await get_or_create_user(user_id)
 
 @router.put("", response_model=UserResponse)

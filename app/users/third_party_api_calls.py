@@ -1,6 +1,7 @@
 from fastapi import HTTPException
 import httpx
 import os
+from app.shared.clerk import fetch_clerk_user_data
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -42,3 +43,7 @@ async def cancel_paypal_subscription(subscription_id: str, access_token: str):
                 status_code=500, detail=f"Failed to cancel subscription: {error}")
 
     return {"status": "cancelled"}
+
+
+async def fetch_clerk_user(user_id: str):
+    return await fetch_clerk_user_data(user_id)
