@@ -36,7 +36,7 @@ async def make_guess(user_id: str, body: GuessRequest) -> GuessResponse:
     daily_song = await get_cached_daily_song()
     
     today = datetime.utcnow().date().isoformat()
-    guesses_user_made_today = await get_guesses(user_id, date=today)
+    guesses_user_made_today = await get_guesses(user_id)
     for past_guess in guesses_user_made_today:
         if past_guess["guess"] == user_new_guess:
             return GuessResponse(guess=user_new_guess, is_correct=past_guess["is_correct"], score=past_guess['score'], guesses_left=user.get("guesses_left"), credit_url=past_guess['credit_url'])

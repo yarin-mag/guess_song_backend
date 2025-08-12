@@ -5,14 +5,782 @@
     "artist": "Richard Sanderson",
     "instrument": "piano",
     "clip_url": "http://localhost:8000/static/reality_piano.mp3",
-    "credit_clip": "https://www.youtube.com/watch?v=uk29cpX6Kd4&ab_channel=Pianothek"    
+    "credit_clip": "https://www.youtube.com/watch?v=uk29cpX6Kd4&ab_channel=Pianothek"
   },
   {
     "id": "2",
     "title": "Heartless",
     "artist": "Kanye West",
-    "instrument": "guitar",
+    "instrument": "guitar electric",
     "clip_url": "http://localhost:8000/static/heartless_trimmed.mp3",
     "credit_clip": "https://www.youtube.com/watch?v=cU7n0x-dTic&ab_channel=JusticeDer"
+  },
+  {
+    "id": "3",
+    "title": "Billie Jean",
+    "artist": "Michael Jackson",
+    "instrument": "guitar classic",
+    "clip_url": "https://www.youtube.com/watch?v=olHI-y3bDaM&ab_channel=MaestrosdelaGuitarra",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Bohemian Rhapsody",
+    "artist": "Queen",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Shape of You",
+    "artist": "Ed Sheeran",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Blinding Lights",
+    "artist": "The Weeknd",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Uptown Funk",
+    "artist": "Mark Ronson ft. Bruno Mars",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Someone Like You",
+    "artist": "Adele",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Rolling in the Deep",
+    "artist": "Adele",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Smells Like Teen Spirit",
+    "artist": "Nirvana",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Wonderwall",
+    "artist": "Oasis",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Let It Be",
+    "artist": "The Beatles",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Hey Jude",
+    "artist": "The Beatles",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Yesterday",
+    "artist": "The Beatles",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Hotel California",
+    "artist": "Eagles",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Sweet Child O' Mine",
+    "artist": "Guns N' Roses",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "November Rain",
+    "artist": "Guns N' Roses",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Like a Rolling Stone",
+    "artist": "Bob Dylan",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Rolling in the Deep",
+    "artist": "Adele",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Fix You",
+    "artist": "Coldplay",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Viva La Vida",
+    "artist": "Coldplay",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Clocks",
+    "artist": "Coldplay",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Shallow",
+    "artist": "Lady Gaga & Bradley Cooper",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Poker Face",
+    "artist": "Lady Gaga",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Bad Romance",
+    "artist": "Lady Gaga",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Hallelujah",
+    "artist": "Leonard Cohen",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Take Me to Church",
+    "artist": "Hozier",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Chandelier",
+    "artist": "Sia",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Elastic Heart",
+    "artist": "Sia",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Cheap Thrills",
+    "artist": "Sia",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Wake Me Up",
+    "artist": "Avicii",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Levels",
+    "artist": "Avicii",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Titanium",
+    "artist": "David Guetta ft. Sia",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Without You",
+    "artist": "David Guetta ft. Usher",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "I Will Always Love You",
+    "artist": "Whitney Houston",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "My Heart Will Go On",
+    "artist": "Celine Dion",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Because You Loved Me",
+    "artist": "Celine Dion",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Imagine",
+    "artist": "John Lennon",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Let It Go",
+    "artist": "Idina Menzel",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Can’t Stop the Feeling!",
+    "artist": "Justin Timberlake",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Cry Me a River",
+    "artist": "Justin Timberlake",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "What Goes Around... Comes Around",
+    "artist": "Justin Timberlake",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Stayin' Alive",
+    "artist": "Bee Gees",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "How Deep Is Your Love",
+    "artist": "Bee Gees",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Dancing Queen",
+    "artist": "ABBA",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Mamma Mia",
+    "artist": "ABBA",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "The Winner Takes It All",
+    "artist": "ABBA",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Waterloo",
+    "artist": "ABBA",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Super Trouper",
+    "artist": "ABBA",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Fernando",
+    "artist": "ABBA",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Skyfall",
+    "artist": "Adele",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Set Fire to the Rain",
+    "artist": "Adele",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Hello",
+    "artist": "Adele",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Love Story",
+    "artist": "Taylor Swift",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "You Belong With Me",
+    "artist": "Taylor Swift",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Shake It Off",
+    "artist": "Taylor Swift",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Blank Space",
+    "artist": "Taylor Swift",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "All Too Well",
+    "artist": "Taylor Swift",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Style",
+    "artist": "Taylor Swift",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Enchanted",
+    "artist": "Taylor Swift",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "I Knew You Were Trouble",
+    "artist": "Taylor Swift",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Teardrops on My Guitar",
+    "artist": "Taylor Swift",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "We Are Never Ever Getting Back Together",
+    "artist": "Taylor Swift",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "The Scientist",
+    "artist": "Coldplay",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Paradise",
+    "artist": "Coldplay",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Something Just Like This",
+    "artist": "Coldplay & The Chainsmokers",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Believer",
+    "artist": "Imagine Dragons",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Radioactive",
+    "artist": "Imagine Dragons",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Demons",
+    "artist": "Imagine Dragons",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Thunder",
+    "artist": "Imagine Dragons",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Whatever It Takes",
+    "artist": "Imagine Dragons",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "On Top of the World",
+    "artist": "Imagine Dragons",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Natural",
+    "artist": "Imagine Dragons",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Bad Liar",
+    "artist": "Imagine Dragons",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Bones",
+    "artist": "Imagine Dragons",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Symphony",
+    "artist": "Clean Bandit ft. Zara Larsson",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Rather Be",
+    "artist": "Clean Bandit ft. Jess Glynne",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Rockabye",
+    "artist": "Clean Bandit ft. Sean Paul & Anne-Marie",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Mozart - Eine kleine Nachtmusik",
+    "artist": "Wolfgang Amadeus Mozart",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Beethoven - Für Elise",
+    "artist": "Ludwig van Beethoven",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Beethoven - Symphony No.5",
+    "artist": "Ludwig van Beethoven",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Beethoven - Moonlight Sonata",
+    "artist": "Ludwig van Beethoven",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Bach - Air on the G String",
+    "artist": "Johann Sebastian Bach",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Bach - Toccata and Fugue in D minor",
+    "artist": "Johann Sebastian Bach",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Bach - Jesu, Joy of Man's Desiring",
+    "artist": "Johann Sebastian Bach",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Vivaldi - Spring",
+    "artist": "Antonio Vivaldi",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Vivaldi - Winter",
+    "artist": "Antonio Vivaldi",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Tchaikovsky - Swan Lake",
+    "artist": "Pyotr Ilyich Tchaikovsky",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Tchaikovsky - Nutcracker Suite",
+    "artist": "Pyotr Ilyich Tchaikovsky",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Chopin - Nocturne Op.9 No.2",
+    "artist": "Frédéric Chopin",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Chopin - Fantaisie-Impromptu",
+    "artist": "Frédéric Chopin",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Liszt - Hungarian Rhapsody No.2",
+    "artist": "Franz Liszt",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Rachmaninoff - Prelude in C# minor",
+    "artist": "Sergei Rachmaninoff",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Debussy - Clair de Lune",
+    "artist": "Claude Debussy",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Saint-Saëns - The Swan",
+    "artist": "Camille Saint-Saëns",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Bizet - Carmen Habanera",
+    "artist": "Georges Bizet",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Strauss - The Blue Danube",
+    "artist": "Johann Strauss II",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
+  },
+  {
+    "id": "",
+    "title": "Grieg - In the Hall of the Mountain King",
+    "artist": "Edvard Grieg",
+    "instrument": "",
+    "clip_url": "",
+    "credit_clip": ""
   }
 ]
