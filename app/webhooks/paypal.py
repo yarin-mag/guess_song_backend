@@ -1,13 +1,15 @@
 import json
-import logging
+import structlog
 import os
+
+logger = structlog.get_logger()
 from fastapi import APIRouter, Request, HTTPException, Header
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.serialization import load_pem_public_key
 from app.shared.http import call_internal_service
-import httpx
+import base64, zlib, httpx
 from datetime import datetime, timedelta
 from app.users.model import get_user_by_id, update_user_fields
 
@@ -16,49 +18,62 @@ router = APIRouter()
 PAYPAL_WEBHOOK_ID = os.getenv("PAYPAL_WEBHOOK_ID")
 
 
-async def verify_paypal_signature(request: Request, headers: dict) -> bool:
+async def verify_paypal_signature(raw_body: bytes, headers: dict, webhook_id: str) -> bool:
     """
-    Verifies the PayPal webhook signature.
+    Self-verifies a PayPal webhook using RSA/SHA256 over:
+    transmissionId|timeStamp|webhookId|crc32(raw_body in decimal)
     """
     try:
-        transmission_id = headers.get("paypal-transmission-id")
-        transmission_time = headers.get("paypal-transmission-time")
-        cert_url = headers.get("paypal-cert-url")
-        auth_algo = headers.get("paypal-auth-algo")
-        transmission_sig = headers.get("paypal-transmission-sig")
-        webhook_id = PAYPAL_WEBHOOK_ID
+        # Normalize header keys to lowercase once
+        h = {k.lower(): v for k, v in headers.items()}
 
-        if not all([transmission_id, transmission_time, cert_url, auth_algo, transmission_sig, webhook_id]):
-            logging.error("Missing PayPal headers for verification.")
+        transmission_id = h.get("paypal-transmission-id")
+        transmission_time = h.get("paypal-transmission-time")
+        cert_url        = h.get("paypal-cert-url")
+        auth_algo       = h.get("paypal-auth-algo")     # e.g., "SHA256withRSA"
+        transmission_sig_b64 = h.get("paypal-transmission-sig")
+
+        if not all([transmission_id, transmission_time, cert_url, auth_algo, transmission_sig_b64, webhook_id]):
+            logger.error("Missing PayPal headers/webhook_id for verification")
             return False
 
-        # Fetch the public key certificate from PayPal
-        async with httpx.AsyncClient() as client:
-            response = await client.get(cert_url)
-            response.raise_for_status()
+        # Safety: only accept PayPal cert hosts
+        if not (cert_url.startswith("https://api.paypal.com/") or cert_url.startswith("https://api.sandbox.paypal.com/")):
+            logger.error("Bad cert_url host", cert_url=cert_url)
+            return False
 
-        cert_pem = response.text
+        # Compute CRC32 over the *raw* body bytes → decimal
+        crc32_decimal = zlib.crc32(raw_body) & 0xFFFFFFFF
+        message = f"{transmission_id}|{transmission_time}|{webhook_id}|{crc32_decimal}"
+
+        # Fetch and parse the X.509 cert, extract public key
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(cert_url)
+            resp.raise_for_status()
+            cert_pem = resp.text
         cert = x509.load_pem_x509_certificate(cert_pem.encode("utf-8"))
         public_key = cert.public_key()
 
-        # Construct the expected signature
-        body = await request.body()
-        expected_signature_base = f"{transmission_id}|{transmission_time}|{webhook_id}|{body.decode('utf-8')}"
+        # Base64-decode the signature from the header
+        signature = base64.b64decode(transmission_sig_b64)
 
-        # Verify the signature
+        # Use the algo from header. Today it's "SHA256withRSA".
+        if "SHA256" in auth_algo.upper():
+            digest = hashes.SHA256()
+        else:
+            logger.error("Unsupported auth_algo", auth_algo=auth_algo)
+            return False
+
         public_key.verify(
-            bytes.fromhex(transmission_sig),
-            expected_signature_base.encode("utf-8"),
+            signature,
+            message.encode("utf-8"),
             padding.PKCS1v15(),
-            hashes.SHA256()
+            digest
         )
-
-        # Additionally, you might want to check the certificate chain and subject.
-        # For this example, we are trusting the certificate from the URL.
-
         return True
+
     except Exception as e:
-        logging.error(f"Error verifying PayPal signature: {e}")
+        logger.exception("PayPal signature verification failed")
         return False
 
 
@@ -68,19 +83,17 @@ async def paypal_webhook(request: Request):
     Handles webhooks from PayPal.
     """
     headers = dict(request.headers)
+    raw_body = await request.body()
 
-    # Temporarily disable verification for local testing if needed
-    # if os.getenv("IS_RUNNING_LOCAL") == "true":
-    #     is_verified = True
-    # else:
-    is_verified = await verify_paypal_signature(request, headers)
+    webhook_id = PAYPAL_WEBHOOK_ID
+    is_verified = await verify_paypal_signature(raw_body, headers, webhook_id)
 
     if not is_verified:
         raise HTTPException(
             status_code=400, detail="Webhook signature verification failed.")
 
     body = await request.body()
-    event = json.loads(body)
+    event = json.loads(raw_body.decode("utf-8"))
 
     if event["event_type"] == "BILLING.SUBSCRIPTION.CREATED":
         resource = event.get("resource", {})
@@ -88,13 +101,11 @@ async def paypal_webhook(request: Request):
         user_id = resource.get("custom_id")
 
         if not user_id:
-            logging.error(
-                "Received subscription event without custom_id (user_id).")
+            logger.error("Received subscription event without custom_id (user_id).")
             raise HTTPException(
                 status_code=400, detail="User ID not found in webhook payload.")
         if not subscription_id:
-            logging.error(
-                "Received subscription event without id (subscription_id).")
+            logger.error("Received subscription event without id (subscription_id).")
             raise HTTPException(
                 status_code=400, detail="Subscription ID not found in webhook payload.")
             
@@ -131,13 +142,13 @@ async def paypal_webhook(request: Request):
             {"user_id": user_id}
         )
 
-        logging.info(f"User {user_id} subscribed successfully.")
+        logger.info("User subscribed successfully", user_id=user_id)
     elif event["event_type"] == "BILLING.SUBSCRIPTION.CANCELLED":
         resource = event.get("resource", {})
         user_id = resource.get("custom_id")
 
         if not user_id:
-            logging.error("Cancellation event missing user ID")
+            logger.error("Cancellation event missing user ID")
             raise HTTPException(status_code=400, detail="Missing user ID")
         
         today = datetime.utcnow().date()
@@ -156,6 +167,6 @@ async def paypal_webhook(request: Request):
             {"user_id": user_id}
         )
 
-        logging.info(f"User {user_id} subscription cancelled.")
+        logger.info("User subscription cancelled", user_id=user_id)
 
     return {"status": "success"}

@@ -1,0 +1,122 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Minimal-cost AWS App Runner service for the Guess Song API.
+  - Single container, smallest instance size (0.25 vCPU / 0.5 GB)
+  - Auto scaling capped to 1 instance (cost ceiling)
+  - Public HTTP, no VPC egress (to avoid NAT costs)
+  NOTE: Replace parameter defaults and ARNs before deploying.
+
+Parameters:
+  ServiceName:
+    Type: String
+    Default: guess-song-api
+    Description: App Runner service name
+  ImageRepositoryType:
+    Type: String
+    AllowedValues: [ECR, ECR_PUBLIC]
+    Default: ECR_PUBLIC
+  ImageIdentifier:
+    Type: String
+    Default: public.ecr.aws/REPLACE_ME/guess-song:latest
+    Description: >
+      Container image URI (ECR/ECR Public). Example for ECR:
+      123456789012.dkr.ecr.eu-west-1.amazonaws.com/guess-song:latest
+  ContainerPort:
+    Type: Number
+    Default: 8000
+  Cpu:
+    Type: String
+    Default: "0.25 vCPU"
+    AllowedValues: ["0.25 vCPU","0.5 vCPU","1 vCPU","2 vCPU","4 vCPU"]
+  Memory:
+    Type: String
+    Default: "0.5 GB"
+    AllowedValues: ["0.5 GB","1 GB","2 GB","3 GB","4 GB","6 GB","8 GB","10 GB","12 GB"]
+  MaxConcurrency:
+    Type: Number
+    Default: 10
+    MinValue: 1
+    MaxValue: 200
+    Description: Max concurrent requests an instance handles before scaling
+  MinSize:
+    Type: Number
+    Default: 1
+    MinValue: 1
+    MaxValue: 10
+    Description: Minimum provisioned instances (App Runner does not support 0)
+  MaxSize:
+    Type: Number
+    Default: 1
+    MinValue: 1
+    MaxValue: 10
+    Description: Maximum instances (cap cost by keeping this at 1)
+  HealthCheckPath:
+    Type: String
+    Default: /health
+    Description: Lightweight path that returns 200 OK (no DB calls)
+  EnvStage:
+    Type: String
+    Default: prod
+
+Resources:
+  AutoScalingConfig:
+    Type: AWS::AppRunner::AutoScalingConfiguration
+    Properties:
+      AutoScalingConfigurationName: !Sub "${ServiceName}-asc"
+      MaxConcurrency: !Ref MaxConcurrency
+      MinSize: !Ref MinSize
+      MaxSize: !Ref MaxSize
+
+  AppRunnerService:
+    Type: AWS::AppRunner::Service
+    Properties:
+      ServiceName: !Ref ServiceName
+      AutoScalingConfigurationArn: !GetAtt AutoScalingConfig.AutoScalingConfigurationArn
+      InstanceConfiguration:
+        Cpu: !Ref Cpu
+        Memory: !Ref Memory
+        # InstanceRoleArn: arn:aws:iam::123456789012:role/apprunner-instance-role
+        # (optional) Needed for Secrets Manager/SSM access; then use RuntimeEnvironmentSecrets below.
+      HealthCheckConfiguration:
+        Protocol: HTTP
+        Path: !Ref HealthCheckPath
+        Interval: 5
+        Timeout: 2
+        HealthyThreshold: 1
+        UnhealthyThreshold: 5
+      NetworkConfiguration:
+        IngressConfiguration:
+          IsPubliclyAccessible: true
+        EgressConfiguration:
+          EgressType: DEFAULT   # Do not attach a VPC connector to avoid NAT costs
+      SourceConfiguration:
+        AutoDeploymentsEnabled: false
+        ImageRepository:
+          ImageIdentifier: !Ref ImageIdentifier
+          ImageRepositoryType: !Ref ImageRepositoryType
+          ImageConfiguration:
+            Port: !Ref ContainerPort
+            RuntimeEnvironmentVariables:
+              - Name: ENV
+                Value: !Ref EnvStage
+              - Name: LOG_LEVEL
+                Value: INFO
+            # For secrets, prefer RuntimeEnvironmentSecrets + InstanceRoleArn:
+            # RuntimeEnvironmentSecrets:
+            #   - Name: OPENAI_API_KEY
+            #     Value: arn:aws:secretsmanager:REGION:ACCOUNT:secret:openai_api_key-xxxxx
+      Tags:
+        - Key: service
+          Value: guess-song
+        - Key: owner
+          Value: you
+        - Key: cost-center
+          Value: demo
+
+Outputs:
+  ServiceUrl:
+    Description: Public URL of the App Runner service
+    Value: !GetAtt AppRunnerService.ServiceUrl
+  ServiceArn:
+    Description: ARN of the App Runner service
+    Value: !GetAtt AppRunnerService.ServiceArn

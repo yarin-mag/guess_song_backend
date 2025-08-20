@@ -1,1 +1,1 @@
-UNPROTECTED_PATHS = ["/songs/daily", "/static/"]
+UNPROTECTED_PATHS = ["/songs/daily", "/static/", "/webhooks/paypal-webhook"]

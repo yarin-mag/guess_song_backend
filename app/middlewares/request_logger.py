@@ -1,6 +1,8 @@
 from starlette.middleware.base import BaseHTTPMiddleware
-from app.shared.logger import log_info, log_error
 import time
+import structlog
+
+logger = structlog.get_logger()
 
 
 class LoggingMiddleware(BaseHTTPMiddleware):
@@ -9,22 +11,36 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         actor = self.get_actor(request)
 
         if request.method != 'OPTIONS':
-            log_info(
-                f"🔄 Request Start: {request.method} {request.url} | By: {actor}")
+            logger.info(
+                "Request Start",
+                method=request.method,
+                url=str(request.url),
+                actor=actor
+            )
 
         try:
             response = await call_next(request)
             duration = round(time.time() - start, 3)
 
             if request.method != 'OPTIONS':
-                log_info(
-                    f"✅ Request End: {request.method} {request.url} | Duration: {duration}s | By: {actor}")
+                logger.info(
+                    "Request End",
+                    method=request.method,
+                    url=str(request.url),
+                    duration=duration,
+                    actor=actor
+                )
             return response
 
         except Exception as e:
             if request.method != 'OPTIONS':
-                log_error(
-                    f"❌ Request Failed: {request.method} {request.url} | Error: {repr(e)} | By: {actor}")
+                logger.error(
+                    "Request Failed",
+                    method=request.method,
+                    url=str(request.url),
+                    error=repr(e),
+                    actor=actor
+                )
             raise
 
     def get_actor(self, request) -> str:

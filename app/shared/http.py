@@ -5,6 +5,9 @@ import jwt
 import uuid
 import time
 from dotenv import load_dotenv
+from app.shared.exceptions import InternalJWTExpiredException, InvalidInternalJWTException
+from fastapi import HTTPException
+
 load_dotenv()
 
 USER_SERVICE_URL = os.getenv("USER_SERVICE_URL", "http://localhost:8000")
@@ -44,9 +47,9 @@ def verify_internal_jwt(token: str) -> Dict[str, Any]:
         payload = jwt.decode(token, MICRO_JWT_SECRET, algorithms=[MICRO_JWT_ALGORITHM])
         return payload
     except jwt.ExpiredSignatureError:
-        raise Exception("Internal JWT expired")
+        raise InternalJWTExpiredException()
     except jwt.InvalidTokenError:
-        raise Exception("Invalid internal JWT")
+        raise InvalidInternalJWTException()
 
 
 async def call_internal_service(
@@ -77,7 +80,9 @@ async def call_internal_service(
         )
 
         if response.status_code >= 400:
-            raise Exception(
-                f"Failed to call {method.upper()} {service_url}: {response.text}")
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=f"Failed to call {method.upper()} {service_url}: {response.text}"
+            )
 
         return response.json()

@@ -2,10 +2,12 @@ from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from app.shared.clerk import verify_clerk_token
-from app.shared.logger import log_error
 from app.shared.http import verify_internal_jwt
 from .consts import UNPROTECTED_PATHS
 import os
+import structlog
+
+logger = structlog.get_logger()
 
 INTERNAL_KEY_HEADER = "x-internal-key"
 INTERNAL_JWT_HEADER = "x-internal-jwt"
@@ -17,8 +19,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
         try:
             if request.method == "OPTIONS":
                 return await call_next(request)
-            print("🧩 Request ID: ", id(request))
-            print("request.url: ", request.url)
+            logger.debug("Request ID", request_id=id(request))
+            logger.debug("Request URL", url=str(request.url))
             # === 0. Bypass authentication for unprotected paths ===
             if any(request.url.path.startswith(p) for p in UNPROTECTED_PATHS):
                 # Log user if present, but continue even if not
@@ -68,5 +70,5 @@ class AuthMiddleware(BaseHTTPMiddleware):
         except HTTPException as e:
             return JSONResponse(status_code=e.status_code, content={"detail": e.detail})
         except Exception as e:
-            log_error(f"[AuthMiddleware] Unexpected error: {e}")
+            logger.error("Unexpected error in AuthMiddleware", error=str(e))
             return JSONResponse(status_code=500, content={"detail": "Internal server error"})

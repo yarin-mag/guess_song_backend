@@ -20,3 +20,11 @@ python scripts/clean.py
 
 # Start the API
 python scripts/run_api.py
+
+
+## Generate new Secret API keys:
+# INTERNAL_API_KEY (32 bytes, base64url, prefixed)
+node -e "const c=require('crypto'); console.log('INTERNAL_API_KEY=aipk_'+c.randomBytes(32).toString('base64url'))"
+
+# MICRO_JWT_SECRET (64 bytes, base64url, prefixed)
+node -e "const c=require('crypto'); console.log('MICRO_JWT_SECRET=hs256_'+c.randomBytes(64).toString('base64url'))"

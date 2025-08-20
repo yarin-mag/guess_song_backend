@@ -11,3 +11,5 @@ class GuessResponse(BaseModel):
     guesses_left: int
     score: int
     credit_url: Optional[str] = None
+    title: Optional[str] = None
+    artist: Optional[str] = None

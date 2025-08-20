@@ -1,11 +1,14 @@
 from fastapi import Request, Header, Depends, HTTPException
 from app.auth.clerk_auth import verify_user
+import structlog
+
+logger = structlog.get_logger()
 
 async def get_current_user_id(
     request: Request,
     authorization: str = Header(None)
 ) -> str:
-    print("🔥 inside get_current_user_id")
+    logger.debug("Inside get_current_user_id")
     # Step 1: If the middleware already set user_id (e.g. M2M), use it
     if hasattr(request.state, "user_id") and request.state.user_id:
         return request.state.user_id

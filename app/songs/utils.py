@@ -1,3 +1,4 @@
+from app.shared.exceptions import NoUnusedSongsException
 import json
 import os
 import time
@@ -34,7 +35,7 @@ def get_daily_song(should_get_credit_url: bool):
     songs = _load_songs()
     unused_songs = [s for s in songs if not s.get("is_used", False)]
     if not unused_songs:
-        raise Exception("No unused songs left")
+        raise NoUnusedSongsException()
 
     new_song = random.choice(unused_songs)
     new_song["is_used"] = True

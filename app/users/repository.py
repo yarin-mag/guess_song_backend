@@ -7,6 +7,7 @@ class UserResponse(BaseModel):
     is_subscribed: bool
     guesses_left: int
     last_guess_date: Optional[datetime] = None
+    last_time_guessed_right: Optional[datetime] = None
     guesses: Dict[str, int] = {} 
     subscription_start_date: Optional[datetime] = None
     subscription_end_date_net: Optional[datetime] = None
@@ -20,6 +21,7 @@ class UserUpdateRequest(BaseModel):
     is_subscribed: Optional[bool] = None
     guesses_left: Optional[int] = None
     last_guess_date: Optional[datetime] = None
+    last_time_guessed_right: Optional[datetime] = None
     subscription_start_date: Optional[datetime] = None
     subscription_end_date_net: Optional[datetime] = None
     subscription_end_date_gross: Optional[datetime] = None
